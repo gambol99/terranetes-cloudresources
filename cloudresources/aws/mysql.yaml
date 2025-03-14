@@ -1,0 +1,108 @@
+---
+apiVersion: terraform.appvia.io/v1alpha1
+kind: Revision
+metadata:
+  name: database
+  namespace: apps
+  labels:
+    app.kubernetes.io/cloud: aws
+    app.kubernetes.io/component: database
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: terranetes-cloudresources
+    app.kubernetes.io/version: v0.0.1
+    app.kubernetes.io/name: database
+spec:
+  ## The plan to use for the cloud resource
+  plan:
+    name: mysql-database
+    categories: [mysql, database, aws]
+    description: Provides a MySQL database instance
+    revision: v0.0.1
+
+  ## The inputs for the plan
+  inputs:
+    - key: identifier
+      description: Is the cloud resource name for the database instance
+      type: string
+      required: true
+    - key: db_name
+      description: Is the name of the database we should create in the instances
+      type: string
+      required: true
+      default:
+        value: demo
+    - key: backup_retention_period
+      description: The days to retain backups for
+      type: number
+      default:
+        value: 7
+    - key: allocated_storage
+      description: The database size in GB as a integer
+      default:
+        value: 5
+    - key: instance_class
+      description: The instance class to use for the database
+      type: string
+      default:
+        value: db.t2.large
+    - key: engine_version
+      description: The version of the database engine to use
+      type: string
+      default:
+        value: "5.7"
+    - key: family
+      description: The family of the database engine to use
+      type: string
+      default:
+    - key: major_engine_version
+      description: The major version of the database engine to use
+      type: string
+      default:
+        value: "5.7"
+
+  configuration:
+    module: https://github.com/terraform-aws-modules/terraform-aws-rds.git?ref=v6.10.0
+
+    # We are going to consume the contextual data from the context
+    valueFrom:
+      - context: default
+        # We will place the database on the private subnets
+        key: private_subnet_ids
+        # We will map to this the following in the module
+        name: subnet_ids
+
+      - context: default
+        # Nodegroups in our infra are using the cluster security
+        # group
+        key: eks_cluster_security_group_ids
+        # We map this to the following in the module
+        name: vpc_security_group_ids
+
+    writeConnectionSecretToRef:
+      name: database
+      keys:
+        - db_instance_address:database_hostname
+        - db_instance_username:database_username
+        - db_instance_password:database_password
+        - db_instance_port:database_port
+
+    variables:
+      ## We will create a subnet group for the database
+      create_db_subnet_group: true
+      ## The engine to use for the database
+      engine: mysql
+      ## The port to use for the database
+      port: 3306
+      ## Skip the final snapshot
+      skip_final_snapshot: true
+      ## Manage the master user password in the secrets manager
+      manage_master_user_password: true
+      manage_master_user_password_rotation: true
+      master_user_password_rotation_automatically_after_days: 30
+      master_user_password_rotation_duration: 3h
+      ## Mysql parameters
+      parameters:
+        - name: character_set_client
+          value: utf8mb4
+        - name: character_set_server
+          alue: utf8mb4
